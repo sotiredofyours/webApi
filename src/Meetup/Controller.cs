@@ -1,34 +1,34 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Net.Mime;
-using Meets.WebApi.Meetup;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.Formatters;
+﻿namespace Meets.WebApi.Meetup;
 
-[Consumes(MediaTypeNames.Application.Json)]
-[Produces(MediaTypeNames.Application.Json)]
+using System.Net.Mime;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+
 [ApiController]
 [Route("/meetups")]
+[Consumes(MediaTypeNames.Application.Json)]
+[Produces(MediaTypeNames.Application.Json)]
 public class MeetupController : ControllerBase
 {
-    private static readonly ICollection<Meetup> Meetups =
-        new List<Meetup>();
-
-    /// <summary>Create new meetup.</summary>
-    /// <param name="createDto">Meetup creation information</param>
-    /// <response code="200">Created meetup.</response>
+    private readonly DatabaseContext _context = new();
+    
+    /// <summary>Create a new meetup.</summary>
+    /// <param name="createDto">Meetup creation information.</param>
+    /// <response code="200">Newly created meetup.</response>
     [HttpPost]
-    public IActionResult CreateMeetup([FromBody] CreateMeetupDto createDto)
+    [ProducesResponseType(typeof(ReadMeetupDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> CreateMeetup([FromBody] CreateMeetupDto createDto)
     {
-        var newMeetup = new Meetup
+        var newMeetup = new MeetupEntity
         {
             Id = Guid.NewGuid(),
             Topic = createDto.Topic,
             Place = createDto.Place,
             Duration = createDto.Duration
         };
-        Meetups.Add(newMeetup);
+        
+        _context.Meetups.Add(newMeetup);
+        await _context.SaveChangesAsync();
 
         var readDto = new ReadMeetupDto
         {
@@ -39,41 +39,46 @@ public class MeetupController : ControllerBase
         };
         return Ok(readDto);
     }
-    
-    /// <summary>Get all meetups</summary>
-    /// <response code="200">Existing meetups.</response>
+
+    /// <summary>Retrieve all meetups.</summary>
+    /// <response code="200">All meetups.</response>
     [HttpGet]
-    public IActionResult GetAllMeetups()
+    [ProducesResponseType(typeof(ReadMeetupDto[]), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetAllMeetups()
     {
-        var readDtos = Meetups.Select(meetup => new ReadMeetupDto
+        var meetups = await _context.Meetups.ToListAsync();
+
+        var readDtos = meetups.Select(meetup => new ReadMeetupDto
         {
             Id = meetup.Id,
-            Duration = meetup.Duration,
             Topic = meetup.Topic,
-            Place = meetup.Place
+            Place = meetup.Place,
+            Duration = meetup.Duration
         });
-
         return Ok(readDtos);
     }
 
     /// <summary>Update meetup with matching id.</summary>
     /// <param name="id" example="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx">Meetup id.</param>
-    /// <response code="200">Updated meetup.</response>
+    /// <param name="updateDto">Meetup update information.</param>
+    /// <response code="204">Meetup was updated successfully.</response>
     /// <response code="404">Meetup with specified id was not found.</response>
     [HttpPut("{id:guid}")]
-    public IActionResult UpdateMeetup([FromRoute] Guid id, [FromBody] UpdateMeetupDto updatedMeetup)
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> UpdateMeetup([FromRoute] Guid id, [FromBody] UpdateMeetupDto updateDto)
     {
-        var oldMeetup = Meetups.SingleOrDefault(meetup => meetup.Id == id);
-
-        // meetup with provided id does not exist
+        var oldMeetup = await _context.Meetups.SingleOrDefaultAsync(meetup => meetup.Id == id);
         if (oldMeetup is null)
         {
             return NotFound();
         }
 
-        oldMeetup.Topic = updatedMeetup.Topic;
-        oldMeetup.Place = updatedMeetup.Place;
-        oldMeetup.Duration = updatedMeetup.Duration;
+        oldMeetup.Topic = updateDto.Topic;
+        oldMeetup.Place = updateDto.Place;
+        oldMeetup.Duration = updateDto.Duration;
+        await _context.SaveChangesAsync();
+        
         return NoContent();
     }
 
@@ -82,17 +87,19 @@ public class MeetupController : ControllerBase
     /// <response code="200">Deleted meetup.</response>
     /// <response code="404">Meetup with specified id was not found.</response>
     [HttpDelete("{id:guid}")]
-    public IActionResult DeleteMeetup([FromRoute] Guid id)
+    [ProducesResponseType(typeof(ReadMeetupDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> DeleteMeetup([FromRoute] Guid id)
     {
-        var meetupToDelete = Meetups.SingleOrDefault(meetup => meetup.Id == id);
-
-        // meetup with provided id does not exist
+        var meetupToDelete = await _context.Meetups.SingleOrDefaultAsync(meetup => meetup.Id == id);
         if (meetupToDelete is null)
         {
             return NotFound();
         }
+        
+        _context.Meetups.Remove(meetupToDelete);
+        await _context.SaveChangesAsync();
 
-        Meetups.Remove(meetupToDelete);
         var readDto = new ReadMeetupDto
         {
             Id = meetupToDelete.Id,
@@ -102,5 +109,4 @@ public class MeetupController : ControllerBase
         };
         return Ok(readDto);
     }
-    
 }
