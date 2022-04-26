@@ -10,7 +10,10 @@ using Microsoft.EntityFrameworkCore;
 [Produces(MediaTypeNames.Application.Json)]
 public class MeetupController : ControllerBase
 {
-    private readonly DatabaseContext _context = new();
+    private readonly DatabaseContext _context;
+
+    public MeetupController(DatabaseContext context) => 
+        _context = context;
     
     /// <summary>Create a new meetup.</summary>
     /// <param name="createDto">Meetup creation information.</param>
